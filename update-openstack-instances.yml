@@ -2,6 +2,7 @@
 - hosts: hostgroup
   serial: 1
   remote_user: ansible
+  become: yes
   tasks:
           - name: Check if there is a previous snapshot for {{inventory_hostname}}
             shell: /home/ansible/.local/bin/openstack image list | grep {{inventory_hostname}}
@@ -16,6 +17,7 @@
             register: has_image
             ignore_errors: true
             delegate_to: localhost
+
           - name: Remove old image snapshot for {{inventory_hostname}}
             shell: /home/ansible/.local/bin/openstack image delete {{inventory_hostname}}-update-snap
             environment:
@@ -28,9 +30,11 @@
                     OS_APPLICATION_CREDENTIAL_SECRET: '{{ auth_password }}'
             delegate_to: localhost
             when: has_image.rc == 0
+
           - name: Wait 1 minute
             pause: 
                     minutes: 1
+
           - name: Create new image snapshot {{inventory_hostname}}-update-snap
             shell: /home/ansible/.local/bin/openstack server image create {{inventory_hostname}} --name {{inventory_hostname}}-update-snap
             environment:
@@ -42,27 +46,35 @@
                     OS_APPLICATION_CREDENTIAL_ID: '{{ auth_id }}'
                     OS_APPLICATION_CREDENTIAL_SECRET: '{{ auth_password }}'
             delegate_to: localhost
-- hosts: hostgroup
-  become: yes
-  serial: 1
-  remote_user: ansible
-  tasks:
+            
           - name: Wait 2 minutes
             pause:
                     minutes: 2
-          - name: Update repositories
-            apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+
+          - name: Update Repositories
+            apt: update_cache=yes
+                 force_apt_get=yes 
+                 cache_valid_time=3600
 
           - name: Upgrade all apt packages
-            apt: upgrade=dist force_apt_get=yes
+            apt: upgrade=dist 
+                 force_apt_get=yes
 
-          - name: Check if a reboot is needed for debian and ubuntu instances
+          - name: Autoclean repository of unavailable packages
+            apt: autoclean=true
+                 force_apt_get=yes
+
+          - name: Autoremove old packages
+            apt: autoremove=true
+                 force_apt_get=yes
+
+          - name: Check if a reboot is needed for Debian and Ubuntu boxes
             register: reboot_required_file
             stat: path=/var/run/reboot-required get_md5=no
 
-          - name: Reboot the debian or ubuntu Server
+          - name: Reboot the Debian or Ubuntu Server
             reboot:
-                    msg: "Reboot initiated by ansible due to kernel updates"
+                    msg: "Reboot initiated by Ansible due to kernel updates"
                     connect_timeout: 5
                     reboot_timeout: 300
                     pre_reboot_delay: 0
